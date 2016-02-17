@@ -1,2 +1,2 @@
 # pylibs
-Utilities for text processing, information retrieva, machine learning and other misc.
+Utilities for text processing, information retrieval, machine learning and other misc.
