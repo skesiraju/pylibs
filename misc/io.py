@@ -10,7 +10,6 @@
 Simple utility functions
 """
 
-from __future__ import print_function
 from os import linesep
 import csv
 from collections import defaultdict
@@ -30,10 +29,10 @@ def convert_data_to_svm(data, labels):
     """
 
     nof, dim = data.shape
-    
+
     data_lst = []
     for i in range(nof):
-        vec_str = str(labels[i]) + " "        
+        vec_str = str(labels[i]) + " "
         for j in range(dim):
             # index should start from 1
             vec_str += str(j+1) + ":" + str(data[i, j]) + " "
@@ -43,7 +42,7 @@ def convert_data_to_svm(data, labels):
 
 def chunkify(lst, n):
     """ chunkify a list to n chunks """
-    return [lst[i::n] for i in xrange(n)]
+    return [lst[i::n] for i in range(n)]
 
 
 def read_simple_flist(fname, pre="", sfx=""):

@@ -10,8 +10,6 @@
 Simple utility functions
 """
 
-from __future__ import print_function
-
 
 def get_cnames():
     """ Get color names as dict """
