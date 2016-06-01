@@ -1,11 +1,11 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # author: Santosh
 # email; kcraj2[AT]gmail[DOT]com
 
 # Date created: Nov 9, 2015
-# Last modified: Jan 17, 2016
+# Last modified: March 07, 2016
 
 """
 A bunch of pre-processing routines for text based
@@ -37,7 +37,8 @@ def replace_data(data, replace):
 
 def remove_punc(data):
     """ Remove punctuation easily. Input data is string """
-    clean_data = data.translate(string.maketrans("", ""), string.punctuation)
+    translator = str.maketrans({key: None for key in string.punctuation})
+    clean_data = data.translate(translator)
     clean_data = re.sub("\s\s+", " ", clean_data)  # remove multiple spaces
     return clean_data
 
@@ -52,7 +53,63 @@ def clean_data(data, clean):
     return clean_data.strip()
 
 
-def get_top_ngrams_per_class(DbyW, vocab, labels, top, prior_weight=False):
+def get_soft_postings(in_fpaths, vocab=None):
+    """ Get postings with freq replaced by soft counts
+
+    Parameters:
+    -----------
+    in_fpaths: list with full paths
+
+    Returns:
+    --------
+    dictionary: {trigram: {doc_id: freq; ..}; ..}
+    """
+
+    spost = {}
+
+    if vocab is not None:
+        for v in vocab:
+            spost[v] = {}
+        print('Postings init with empty values for', len(vocab),
+              'keys. Post len:', len(spost))
+
+    for doc_id in range(len(in_fpaths)):
+        fpath = in_fpaths[doc_id]
+        with open(fpath, 'r') as fpr:
+            for line in fpr:
+                line = line.strip()
+                if line == "":
+                    continue
+
+                vals = line.split(";")
+                for val in vals:
+                    if val.strip() == '':
+                        continue
+
+                    parts = val.split("=")
+                    if len(parts) < 2:
+                        print('val:', val, 'line:', line)
+                        sys.exit()
+
+                    tok = parts[0]  # phoneme trigram
+                    freq = float(parts[1])
+
+                    tmp_d = {}
+                    if tok in spost:
+                        tmp_d = spost[tok]
+                        if doc_id in tmp_d:
+                            tmp_d[doc_id] += freq
+                        else:
+                            tmp_d[doc_id] = freq
+                    else:
+                        tmp_d[doc_id] = freq
+
+                    spost[tok] = tmp_d
+
+    return spost
+
+
+def get_top_ngrams_per_class(DbyW, vocab, labels, top, prior_weight=True):
     """ Get top (ML sense) n-grams (feats) per class(topic)
 
     Parameters:
@@ -75,16 +132,16 @@ def get_top_ngrams_per_class(DbyW, vocab, labels, top, prior_weight=False):
     L = len(uniq_lab)
     lab_ixs = np.zeros(labels.shape)
 
-    print('D, W, L:', D, W, L)
+    # print('D, W, L:', D, W, L)
 
-    for i in xrange(len(labels)):
+    for i in range(len(labels)):
         lab_ixs[i] = uniq_lab.index(labels[i])
 
     DbyL = scipy.sparse.csr_matrix((np.ones(D), (np.arange(D), lab_ixs)),
                                    shape=(D, L))
 
     WbyL = DbyW.T.dot(DbyL)
-    print('DbyL:', DbyL.shape, 'WbyL:', WbyL.shape)
+    # print('DbyL:', DbyL.shape, 'WbyL:', WbyL.shape)
 
     if prior_weight:
         # non-uniform priors
@@ -97,11 +154,15 @@ def get_top_ngrams_per_class(DbyW, vocab, labels, top, prior_weight=False):
 
         WbyL = (WbyL.T + (priors * L)).T
 
+    else:
+        print("ERROR: prior_weight=False, not implemented.")
+        sys.exit()
+
     P_WL = np.asarray(WbyL / WbyL.sum(axis=1))
-    print('P_WL:', P_WL.shape)
+    # print('P_WL:', P_WL.shape)
 
     all_ixs = []
-    for j in xrange(P_WL.shape[1]):
+    for j in range(P_WL.shape[1]):
         w_ixs = np.argsort(P_WL[:, j])[-top:]
         all_ixs.append(w_ixs)
 
@@ -129,7 +190,7 @@ def update_postings(post_d, tf, d_ix):
     post_d (dict): Updates the give post_d and returns it
     """
 
-    for tok, freq in tf.iteritems():
+    for tok, freq in tf.items():
         tmp_d = {}
         if tok in post_d:
             tmp_d = post_d[tok]
@@ -144,15 +205,17 @@ def update_postings(post_d, tf, d_ix):
     return post_d
 
 
-def convert_postings_to_dbyw(post_d, ndocs, idf=False):
+def convert_postings_to_dbyw(post_d, ndocs, vocab=None, idf=False):
     """ Convert the postings to doc by word sparse matrix. Row indices are
     doc indices from postings and column indices are word indices from
-    vocabulary.
+    vocabulary. In the postings, doc ID are doc indices (int) not alpha-num.
 
     Parameters:
     -----------
     post_d (dict): postings dict (dict with a dict), {word: {doc_ix:freq}} \n
-    ndocs (int): number of documents \n
+    ndocs (int): number of documents \n\
+    vocab (list): If given, the same sequence is followed for cols in DbyW,
+    else vocab will be sorted keys from postings \n
     idf (bool): inverse doc freq, default=False
 
 
@@ -163,7 +226,16 @@ def convert_postings_to_dbyw(post_d, ndocs, idf=False):
     matrix.
     """
 
-    vocab = post_d.keys()
+    if vocab is None:
+        vocab = sorted(post_d.keys())
+        # print('Vocab is obtained from postings, using sorted sequence.')
+    # else:
+        #  print('Vocab given, using the same sequence to generate DbyW.')
+
+    if len(post_d) != len(vocab):
+        print("No. of tokens in postings do not match with the given vocab",
+              "size. But that's okay, I will consider only the ones that",
+              "are present in the vocab.")
 
     D = ndocs
     W = len(vocab)
@@ -171,7 +243,11 @@ def convert_postings_to_dbyw(post_d, ndocs, idf=False):
     rows = []
     cols = []
     vals = []
-    for tok, doc_d in post_d.iteritems():
+
+    for tok, doc_d in post_d.items():
+
+        if tok not in vocab:
+            continue
         w_ix = vocab.index(tok)
         doc_ixs = doc_d.keys()
 
@@ -202,7 +278,7 @@ def convert_postings_to_tf(post_d):
     """
 
     tf = {}
-    for k, doc_d in post_d.iteritems():
+    for k, doc_d in post_d.items():
         tf[k] = sum(doc_d.values())
     return tf
 
@@ -265,7 +341,7 @@ def get_term_freq(content, n=1, vocab=None, replace=None,
 
         tokens = line.split(" ")
 
-        for i in xrange(len(tokens) - n+1):
+        for i in range(len(tokens) - n+1):
             tok = " ".join(tokens[i: i+n]).strip()
             if(vocab is not None):
                 if(tok not in vocab):
@@ -329,7 +405,7 @@ class TextVector:
 
         post_d = {}
 
-        for doc_id in xrange(len(flist)):
+        for doc_id in range(len(flist)):
 
             fname = flist[doc_id]
 
@@ -357,6 +433,9 @@ class TextVector:
 
                 for i in range(len(tokens) - self.n+1):
                     tok = " ".join(tokens[i: i+self.n]).strip()
+
+                    if len(tok) == 0:
+                        continue
 
                     tmp_d = {}
                     if tok in post_d:
@@ -389,12 +468,12 @@ class TextVector:
             print('Exiting..')
             sys.exit()
 
-        # init postings dictionary with empty entries for each vocab
+        # init postings dictionary with empty entries for each token in vocab
         post_d = {}
         for v in self.vocab:
             post_d[v] = {}
 
-        for doc_id in xrange(len(flist)):
+        for doc_id in range(len(flist)):
 
             fname = flist[doc_id]
 
@@ -458,13 +537,17 @@ class TextVector:
 
         # print('NOTE: Doc IDs are indices in the file list.')
 
+        if self.vocab is not None:
+            print("Vocab is already given, use fit_ method.")
+            sys.exit()
+
         post_d = self.get_postings(flist)
 
-        self.vocab = post_d.keys()
+        self.vocab = sorted(post_d.keys())
 
         D = len(flist)
 
-        DbyW, self.vocab = convert_postings_to_dbyw(post_d, D, self.idf)
+        DbyW, _ = convert_postings_to_dbyw(post_d, D, self.vocab, self.idf)
 
         return DbyW, self.vocab
 
@@ -488,11 +571,12 @@ class TextVector:
             sys.exit()
 
         # print('NOTE: Doc IDs are indices in the file list.')
+        # print('Vocab length:', len(self.vocab))
 
         post_d = self.fit_postings(flist)
 
         D = len(flist)
 
-        DbyW, _ = convert_postings_to_dbyw(post_d, D, self.idf)
+        DbyW, _ = convert_postings_to_dbyw(post_d, D, self.vocab, self.idf)
 
         return DbyW

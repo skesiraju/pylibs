@@ -16,6 +16,31 @@ import csv
 from collections import defaultdict
 
 
+def convert_data_to_svm(data, labels):
+    """ Convert data matrix and labels to LIBSVM format
+
+    Parameters:
+    -----------
+    data: numpy ndarray, rows = feats, cols = dim \n
+    labels: numpy array, equal to no of rows in data \n
+
+    Returns:
+    --------
+    data_lst: list where every element is a string
+    """
+
+    nof, dim = data.shape
+    
+    data_lst = []
+    for i in range(nof):
+        vec_str = str(labels[i]) + " "        
+        for j in range(dim):
+            # index should start from 1
+            vec_str += str(j+1) + ":" + str(data[i, j]) + " "
+        data_lst.append(vec_str.strip())
+    return data_lst
+
+
 def chunkify(lst, n):
     """ chunkify a list to n chunks """
     return [lst[i::n] for i in xrange(n)]

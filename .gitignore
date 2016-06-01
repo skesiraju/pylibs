@@ -1,3 +1,5 @@
 .spyderworkspace
 *.pyc
 *~
+ipython_notebooks
+ipython_notebooks/*.ipynb
