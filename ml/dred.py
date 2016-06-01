@@ -11,7 +11,6 @@ Basic machine learning utilities for dimensionality reduction
 1. Linear Discriminant Analysis
 """
 
-from __future__ import print_function
 import numpy as np
 import sys
 from prep import standardize_data, standardize_test_data
@@ -60,7 +59,7 @@ class LiDA:
         MU = np.zeros(shape=(self.noc, self.dim))  # mean for each class
         S_W = np.zeros(shape=(self.dim, self.dim))  # with-in class scatter
 
-        for i in xrange(len(sel)):
+        for i in range(len(sel)):
             ci = sel[i]
             mu_i = np.mean(self.X[ci, :], axis=1)
             MU[i, :] = mu_i
@@ -80,7 +79,7 @@ class LiDA:
 
         S_B = np.zeros(shape=(self.dim, self.dim))  # between class scatter
 
-        for i in xrange(len(sel)):
+        for i in range(len(sel)):
             cis = sel[i]  # class indices
             # mean of c_i
             mu_i = np.mean(self.X[cis, :], axis=1).reshape((self.dim, 1))
@@ -107,7 +106,7 @@ class LiDA:
             top_eigs = eig_ixs[::-1][:self.t_dim]  # top 2 eig val indices
 
             self.W = np.empty(shape=(self.dim, len(top_eigs)))
-            for i in xrange(len(top_eigs)):
+            for i in range(len(top_eigs)):
                 ix = top_eigs[i]
                 self.W[:, i] = eig_vecs[:, ix].real
         else:
