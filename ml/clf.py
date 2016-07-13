@@ -13,7 +13,7 @@ Classifiers
 
 import numpy as np
 import sys
-from prep import standardize_data, standardize_test_data
+from .prep import standardize_data, standardize_test_data
 # from memory_profiler import profile
 
 

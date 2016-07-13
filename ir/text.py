@@ -325,6 +325,7 @@ def get_term_freq(content, n=1, vocab=None, replace=None,
         vocab = set(sorted(vocab))
 
     tf_d = {}
+    # print(data)
 
     for line in data:
         line = line.strip()
@@ -345,6 +346,9 @@ def get_term_freq(content, n=1, vocab=None, replace=None,
             if(vocab is not None):
                 if(tok not in vocab):
                     continue
+
+            if tok == "":
+                continue
 
             if(tok in tf_d):
                 tf_d[tok] += 1
