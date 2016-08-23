@@ -94,13 +94,13 @@ def get_soft_postings(in_fpaths, vocab=None):
                     freq = float(parts[1])
 
                     tmp_d = {}
-                    if tok in spost:
+                    try:
                         tmp_d = spost[tok]
-                        if doc_id in tmp_d:
+                        try:
                             tmp_d[doc_id] += freq
-                        else:
+                        except KeyError:
                             tmp_d[doc_id] = freq
-                    else:
+                    except KeyError:
                         tmp_d[doc_id] = freq
 
                     spost[tok] = tmp_d
@@ -360,9 +360,9 @@ def get_term_freq(content, n=1, vocab=None, replace=None,
             if tok == "":
                 continue
 
-            if(tok in tf_d):
+            try:
                 tf_d[tok] += 1
-            else:
+            except KeyError:
                 tf_d[tok] = 1
     return tf_d
 
