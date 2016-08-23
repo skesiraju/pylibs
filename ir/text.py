@@ -283,7 +283,8 @@ def convert_postings_to_tf(post_d):
 
 
 def get_term_freq(content, n=1, vocab=None, replace=None,
-                  clean=None, to_lower=False, remove_punc=False):
+                  clean=None, to_lower=False, remove_punc=False,
+                  starts_with_id=False):
     """ Get the term frequency from a given list of strings or file.
     It also does basic pruning.
 
@@ -298,6 +299,8 @@ def get_term_freq(content, n=1, vocab=None, replace=None,
     the text \n
     to_lower (bool): if True, tokens are converted to lower case \n
     remove_punc (bool): Removes punctuation if True
+    starts_with_id (bool): Does each line starts with some setence ID?
+    default=False.
 
     Returns:
     --------
@@ -330,6 +333,13 @@ def get_term_freq(content, n=1, vocab=None, replace=None,
     for line in data:
         line = line.strip()
 
+        if line == "":
+            continue
+
+        if starts_with_id:
+            sid_len = len(line.split()[0])
+            line = line[sid_len:].strip()
+
         if to_lower:
             line = line.lower()
         if clean is not None:
@@ -360,7 +370,8 @@ def get_term_freq(content, n=1, vocab=None, replace=None,
 class TextVector:
 
     def __init__(self, n=1, vocab=None, clean=None, replace=None,
-                 to_lower=False, remove_punc=False, idf=False):
+                 to_lower=False, remove_punc=False, idf=False,
+                 starts_with_id=False):
         """
 
         Parameters:
@@ -374,6 +385,8 @@ class TextVector:
         to_lower (bool): if True, tokens are converted to lower case \n
         remove_punc (bool): Removes punctuation if True \n
         idf (bool): Apply inverse doc freq weighting ?
+        starts_with_id (bool): Does each line starts with some setence ID?
+        default=False.
         """
 
         self.n = n
@@ -383,6 +396,7 @@ class TextVector:
         self.to_lower = to_lower
         self.remove_punc = remove_punc
         self.idf = idf
+        self.starts_with_id = starts_with_id
 
     def get_postings(self, flist):
         """ Get the postings (dict), i.e., tf w.r.t every file.
@@ -432,7 +446,13 @@ class TextVector:
 
             for line in lines:
                 line = line.strip()
-                tokens = line.split(" ")
+                if line == "":
+                    continue
+
+                tokens = line.split()
+
+                if self.starts_with_id:
+                    tokens = tokens[1:]
 
                 for i in range(len(tokens) - self.n+1):
                     tok = " ".join(tokens[i: i+self.n]).strip()
@@ -441,13 +461,13 @@ class TextVector:
                         continue
 
                     tmp_d = {}
-                    if tok in post_d:
+                    try:
                         tmp_d = post_d[tok]
-                        if doc_id in tmp_d:
+                        try:
                             tmp_d[doc_id] += 1
-                        else:
+                        except KeyError:
                             tmp_d[doc_id] = 1
-                    else:
+                    except KeyError:
                         tmp_d[doc_id] = 1
 
                     post_d[tok] = tmp_d
@@ -500,20 +520,26 @@ class TextVector:
 
             for line in lines:
                 line = line.strip()
-                tokens = line.split(" ")
+                tokens = line.split()
+
+                if self.starts_with_id:
+                    tokens = tokens[1:]
 
                 for i in range(len(tokens) - self.n+1):
                     tok = " ".join(tokens[i: i+self.n]).strip()
 
                     tmp_d = {}
-                    if tok in post_d:
+                    try:
                         tmp_d = post_d[tok]
-                        if doc_id in tmp_d:
+                        try:
                             tmp_d[doc_id] += 1
-                        else:
+                        except KeyError:
                             tmp_d[doc_id] = 1
 
                         post_d[tok] = tmp_d
+
+                    except KeyError:
+                        pass
 
         return post_d
 

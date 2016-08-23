@@ -8,7 +8,7 @@
 
 """
 Classifiers
-1. Linear Gaussian Classifier
+1. Gaussian Linear Classifier
 """
 
 import numpy as np
@@ -19,15 +19,15 @@ from .prep import standardize_data, standardize_test_data
 
 class GC:
 
-    def __init__(self, est_prior=True, stdize=False, check=False):
+    def __init__(self, est_prior=False, stdize=False, check=False):
         """
-        Linear Gaussian classifier
+        Gaussian Linear classifier
 
         Parameters:
         -----------
-        est_prior_type (bool): Estimate from training data or uniform
-        stdize (bool): Standardize data, default = False
-        check (bool): Cross check ACC, WCC computations
+        est_prior_type (bool): Estimate from training data or uniform\n
+        stdize (bool): Standardize data, default = False\n
+        check (bool): Cross check ACC, WCC computations\n
         """
 
         self.NOC = None
@@ -41,6 +41,7 @@ class GC:
 
         self.W_k = None
         self.W_k0 = None
+        self.logP = None
 
         self.col_mean = None
         self.col_std = None
@@ -199,6 +200,10 @@ class GC:
 
         # compute W_k (matrix), W_k0 (vector)
         self.__compute_W_k_and_W_k0(class_mus, scov, priors)
+
+        # log posteriors
+        self.logP = self.W_k.dot(data.T).T
+        np.add(self.W_k0, self.logP, out=self.logP)
 
     def predict(self, test):
         """ Predict the class labels for the test data

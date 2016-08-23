@@ -10,7 +10,6 @@
 Simple utility functions
 """
 
-from os import linesep
 import csv
 from collections import defaultdict
 
@@ -60,7 +59,7 @@ def read_simple_flist(fname, pre="", sfx=""):
 
     flist = []
     with open(fname, 'r') as fpr:
-        flist = fpr.read().split(linesep)
+        flist = fpr.read().split("\n")
 
     if flist[-1].strip() == "":
         flist = flist[:-1]
