@@ -236,6 +236,7 @@ def convert_postings_to_dbyw(post_d, ndocs, vocab=None, idf=False):
               "size. But that's okay, I will consider only the ones that",
               "are present in the vocab.")
 
+    vocab = set(vocab)
     D = ndocs
     W = len(vocab)
 
@@ -243,10 +244,39 @@ def convert_postings_to_dbyw(post_d, ndocs, vocab=None, idf=False):
     cols = []
     vals = []
 
+    if idf:
+        DbyW = np.zeros(shape=(len(vocab), D), dtype=float)
+    else:
+        DbyW = np.zeros(shape=(len(vocab), D), dtype=int)
+
+    """
+    for tok, doc_d in post_d.items():
+        
+        if tok not in vocab:
+            continue
+
+        w_ix = vocab.index(tok)
+        doc_ixs = doc_d.keys()
+
+        if idf:
+            cnts = [doc_d[d] * log(float(D)/len(doc_ixs)) for d in doc_ixs]
+        else:
+            cnts = [doc_d[d] for d in doc_ixs]
+
+        # cols += [w_ix] * len(doc_ixs)
+        # rows += doc_ixs
+        # vals += cnts
+
+        print(len(doc_ixs), len(cnts))
+        break
+
+
+    """
     for tok, doc_d in post_d.items():
 
         if tok not in vocab:
             continue
+        
         w_ix = vocab.index(tok)
         doc_ixs = doc_d.keys()
 
@@ -260,6 +290,7 @@ def convert_postings_to_dbyw(post_d, ndocs, vocab=None, idf=False):
         vals += cnts
 
     DbyW = scipy.sparse.coo_matrix((vals, (rows, cols)), shape=(D, W))
+    
 
     return DbyW, vocab
 
