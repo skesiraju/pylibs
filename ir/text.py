@@ -204,7 +204,7 @@ def update_postings(post_d, tf, d_ix):
     return post_d
 
 
-def convert_postings_to_dbyw(post_d, ndocs, vocab=None, idf=False):
+def convert_postings_to_dbyw(post_d, ndocs, vocab=None):
     """ Convert the postings to doc by word sparse matrix. Row indices are
     doc indices from postings and column indices are word indices from
     vocabulary. In the postings, doc ID are doc indices (int) not alpha-num.
@@ -215,8 +215,6 @@ def convert_postings_to_dbyw(post_d, ndocs, vocab=None, idf=False):
     ndocs (int): number of documents \n\
     vocab (list): If given, the same sequence is followed for cols in DbyW,
     else vocab will be sorted keys from postings \n
-    idf (bool): inverse doc freq, default=False
-
 
     Returns:
     --------
@@ -236,7 +234,7 @@ def convert_postings_to_dbyw(post_d, ndocs, vocab=None, idf=False):
               "size. But that's okay, I will consider only the ones that",
               "are present in the vocab.")
 
-    vocab = set(vocab)
+    vocab = vocab
     D = ndocs
     W = len(vocab)
 
@@ -244,53 +242,24 @@ def convert_postings_to_dbyw(post_d, ndocs, vocab=None, idf=False):
     cols = []
     vals = []
 
-    if idf:
-        DbyW = np.zeros(shape=(len(vocab), D), dtype=float)
-    else:
-        DbyW = np.zeros(shape=(len(vocab), D), dtype=int)
-
-    """
-    for tok, doc_d in post_d.items():
-        
-        if tok not in vocab:
-            continue
-
-        w_ix = vocab.index(tok)
-        doc_ixs = doc_d.keys()
-
-        if idf:
-            cnts = [doc_d[d] * log(float(D)/len(doc_ixs)) for d in doc_ixs]
-        else:
-            cnts = [doc_d[d] for d in doc_ixs]
-
-        # cols += [w_ix] * len(doc_ixs)
-        # rows += doc_ixs
-        # vals += cnts
-
-        print(len(doc_ixs), len(cnts))
-        break
-
-
-    """
     for tok, doc_d in post_d.items():
 
-        if tok not in vocab:
-            continue
-        
-        w_ix = vocab.index(tok)
-        doc_ixs = doc_d.keys()
+        try:
+            
+            w_ix = vocab.index(tok)
+            doc_ixs = doc_d.keys()
 
-        if idf:
-            cnts = [doc_d[d] * log(float(D)/len(doc_ixs)) for d in doc_ixs]
-        else:
             cnts = [doc_d[d] for d in doc_ixs]
 
-        cols += [w_ix] * len(doc_ixs)
-        rows += doc_ixs
-        vals += cnts
+            cols += [w_ix] * len(doc_ixs)
+            rows += doc_ixs
+            vals += cnts
 
-    DbyW = scipy.sparse.coo_matrix((vals, (rows, cols)), shape=(D, W))
-    
+        except ValueError:
+            pass
+
+    DbyW = scipy.sparse.coo_matrix((vals, (rows, cols)), shape=(D, W),
+                                   dtype=int)    
 
     return DbyW, vocab
 
@@ -398,10 +367,28 @@ def get_term_freq(content, n=1, vocab=None, replace=None,
     return tf_d
 
 
+def trim_postings(post_d, min_freq):
+    """ Trim postings based on min freq """
+
+    new_post = {}
+    
+    for tok, doc_d in post_d.items():
+        new_doc_d = {}
+        for doc_id, freq in doc_d.items():
+            if freq >= min_freq:
+                new_doc_d[doc_id] = freq
+
+        if len(new_doc_d) > 0:
+            new_post[tok] = new_doc_d
+        
+    return new_post
+                
+    
+
 class TextVector:
 
     def __init__(self, n=1, vocab=None, clean=None, replace=None,
-                 to_lower=False, remove_punc=False, idf=False,
+                 to_lower=False, remove_punc=False, min_freq=0,
                  starts_with_id=False):
         """
 
@@ -415,7 +402,7 @@ class TextVector:
         the text \n
         to_lower (bool): if True, tokens are converted to lower case \n
         remove_punc (bool): Removes punctuation if True \n
-        idf (bool): Apply inverse doc freq weighting ?
+        min_freq (int): Ignores tokens that occur less than min_freq \n
         starts_with_id (bool): Does each line starts with some setence ID?
         default=False.
         """
@@ -426,7 +413,7 @@ class TextVector:
         self.replace = replace
         self.to_lower = to_lower
         self.remove_punc = remove_punc
-        self.idf = idf
+        self.min_freq = min_freq
         self.starts_with_id = starts_with_id
 
     def get_postings(self, flist):
@@ -503,6 +490,10 @@ class TextVector:
 
                     post_d[tok] = tmp_d
 
+        if self.min_freq > 0:
+            post_d = trim_postings(post_d, self.min_freq)
+        
+                    
         return post_d
 
     def fit_postings(self, flist):
@@ -607,7 +598,7 @@ class TextVector:
 
         D = len(flist)
 
-        DbyW, _ = convert_postings_to_dbyw(post_d, D, self.vocab, self.idf)
+        DbyW, _ = convert_postings_to_dbyw(post_d, D, self.vocab)
 
         return DbyW, self.vocab
 
@@ -637,6 +628,6 @@ class TextVector:
 
         D = len(flist)
 
-        DbyW, _ = convert_postings_to_dbyw(post_d, D, self.vocab, self.idf)
+        DbyW, _ = convert_postings_to_dbyw(post_d, D, self.vocab)
 
         return DbyW
