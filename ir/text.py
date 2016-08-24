@@ -388,7 +388,7 @@ def trim_postings(post_d, min_freq):
 class TextVector:
 
     def __init__(self, n=1, vocab=None, clean=None, replace=None,
-                 to_lower=False, remove_punc=False, min_freq=0,
+                 to_lower=False, remove_punc=False, min_freq=1,
                  starts_with_id=False):
         """
 
@@ -490,7 +490,7 @@ class TextVector:
 
                     post_d[tok] = tmp_d
 
-        if self.min_freq > 0:
+        if self.min_freq > 1:
             post_d = trim_postings(post_d, self.min_freq)
         
                     
