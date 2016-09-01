@@ -25,13 +25,23 @@ from math import log
 
 def replace_data(data, replace):
     """ replace the certain tokens in the data according to
-    the tuples in the list replace. Input data is string """
+    the tuples in the list replace. Input data is string """    
 
-    for pair in replace:
-        patt = re.compile(pair[0])
-        data = re.sub(patt, pair[1], data)
-    data = re.sub("\s\s+", " ", data)  # remove multiple spaces
-    return data
+    new_data = "" 
+    lines = data.split('\n')
+    for line in lines:
+
+        if line.strip() == '':
+            continue
+        
+        for pair in replace:
+            patt = re.compile(pair[0])
+            line = re.sub(patt, pair[1], line)
+
+        line = re.sub("\s\s+", " ", line)  # remove multiple spaces
+        new_data += line.strip() + "\n"
+
+    return new_data.strip()
 
 
 def remove_punc(data):
@@ -247,7 +257,7 @@ def convert_postings_to_dbyw(post_d, ndocs, vocab=None):
         try:
             
             w_ix = vocab.index(tok)
-            doc_ixs = doc_d.keys()
+            doc_ixs = list(doc_d.keys())
 
             cnts = [doc_d[d] for d in doc_ixs]
 
@@ -259,7 +269,7 @@ def convert_postings_to_dbyw(post_d, ndocs, vocab=None):
             pass
 
     DbyW = scipy.sparse.coo_matrix((vals, (rows, cols)), shape=(D, W),
-                                   dtype=int)    
+                                   dtype=int)
 
     return DbyW, vocab
 
@@ -455,8 +465,9 @@ class TextVector:
                     data = data.lower()
                 if self.clean is not None:
                     data = clean_data(data, self.clean)
-                if self.replace is not None:
-                    data = replace_data(data, self.replace)
+                if self.replace is not None:                    
+                    data = replace_data(data, self.replace)                   
+                       
                 if self.remove_punc:
                     data = remove_punc(data)
 
@@ -471,7 +482,7 @@ class TextVector:
 
                 if self.starts_with_id:
                     tokens = tokens[1:]
-
+                    
                 for i in range(len(tokens) - self.n+1):
                     tok = " ".join(tokens[i: i+self.n]).strip()
 
