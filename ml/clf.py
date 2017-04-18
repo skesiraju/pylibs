@@ -11,15 +11,29 @@ Classifiers
 1. Gaussian Linear Classifier
 """
 
-import numpy as np
 import sys
+import numpy as np
+import numexpr as ne
 from .prep import standardize_data, standardize_test_data
+
 # from memory_profiler import profile
 
+def logsumexp(mat):
+    """ log sum exp function, reasonably faster than scipy version """
 
-class GC:
+    x_mat = np.copy(mat)
+    xmax = np.max(x_mat, axis=0)
+    ne.evaluate("exp(x_mat - xmax)", out=x_mat)
+    x_mat = xmax + np.log(np.sum(x_mat, axis=0))
+    inf_ix = ~np.isfinite(xmax)
+    x_mat[inf_ix] = xmax[inf_ix]
+    return x_mat
 
-    def __init__(self, est_prior=False, stdize=False, check=False):
+
+class GLC:
+    """ Gaussian Linear Classifier """
+
+    def __init__(self, est_prior=False, stdize=False):
         """
         Gaussian Linear classifier
 
@@ -27,110 +41,71 @@ class GC:
         -----------
         est_prior_type (bool): Estimate from training data or uniform\n
         stdize (bool): Standardize data, default = False\n
-        check (bool): Cross check ACC, WCC computations\n
         """
 
-        self.NOC = None
-        self.DIM = None
         self.stdize = stdize
-        self.check = check
         self.est_prior = est_prior
 
         # label indices may not start from 0, hence this
         self.label_map = []
 
-        self.W_k = None
-        self.W_k0 = None
-        self.logP = None
+        self.w_k = None
+        self.w_k0 = None
+        self.log_post = None
 
         self.col_mean = None
         self.col_std = None
 
-    def __compute_WCC(self, feat_mat):
-        """ Compute with-in class covariance """
+    def compute_cmus_scov(self, data, labels):
+        """ Compute class means and shared covariance
+        (weighted within-class covariance) """
 
-        mu = np.mean(feat_mat, axis=0, dtype=np.float64)  # mean for all feats
-        mu = np.reshape(mu, (len(mu), 1))
-        r, c = np.shape(feat_mat)
-        cov = np.zeros(shape=(self.DIM, self.DIM), dtype=np.float64)
-        for i in range(r):
-            vec = np.reshape(feat_mat[i, :], (len(feat_mat[i, :]), 1))
-            cov += np.dot((vec - mu), (vec - mu).T)
+        self.label_map, class_sizes = np.unique(labels, return_counts=True)
+        dim = data.shape[1]
 
-        cov = np.divide(cov, np.float64(r))
+        cmus = np.zeros(shape=(len(class_sizes), dim))
+        acc = np.zeros(shape=(dim, dim))
+        scov = np.zeros_like(acc)
 
-        return mu, cov
+        gl_mu = np.mean(data, axis=0).reshape(-1, 1)
+        gl_cov = np.cov(data.T, bias=True)
 
-    def __compute_ACC(self, MU, class_mu, class_size, N):
-        """ Compute across class covariance """
+        for i, k in enumerate(self.label_map):
+            data_k = data[np.where(labels == k)[0], :]
+            mu_k = np.mean(data_k, axis=0).reshape(-1, 1)
+            cmus[i, :] = mu_k[:, 0]
+            acc += (gl_mu - mu_k).dot((gl_mu - mu_k).T) * data_k.shape[0]
 
-        cov_ac = np.zeros(shape=(self.DIM, self.DIM), dtype=np.float64)
-        for i in range(len(class_mu)):
-            mu_c = np.reshape(class_mu[i, :], (len(class_mu[i, :]), 1))
-            cov_ac += np.multiply(np.dot((mu_c - MU), (mu_c - MU).T),
-                                  class_size[i])
+        acc /= data.shape[0]
+        scov = gl_cov - acc
 
-        cov_ac = np.divide(cov_ac, np.float64(N - 1))
-
-        return cov_ac
-
-    def __check(self, class_cov, cov_ac, gl_cov, class_sizes, gl_mu,
-                class_mus, N):
-        """ Cross check the cov computation """
-
-        flag = False
-
-        ccov = np.zeros(shape=(self.DIM, self.DIM), dtype=np.float64)
-        for i in range(len(class_cov)):
-            ccov += np.multiply(class_cov[i], class_sizes[i])
-            ccov = np.divide(ccov, np.float64(N - 1))
-        ccov += cov_ac
-
-        weights = np.divide(class_sizes, N)
-        wt_avg_cmu = np.average(class_mus, axis=0, weights=weights)
-        wt_avg_cmu = np.reshape(wt_avg_cmu, (self.DIM, 1))
-
-        if np.allclose(gl_mu, wt_avg_cmu):
-            print('Cross checked the mean computation. Good to go.')
-        else:
-            print('Something is wrong in mean computation.')
-            flag = True
-
-        if np.allclose(gl_cov, ccov):
-            print('Cross checked the covariance computation. Good to go.')
-        else:
-            print('Something is wrong in WCC, ACC computations.')
-            flag = True
-
-        if flag:
-            print('Exiting..')
-            sys.exit()
+        return cmus, scov, class_sizes
 
     def __check_test_data(self, test):
         """ Check the test data """
 
-        nop, dim = test.shape
-        if dim != self.DIM:
-            print("ERROR: Test data dimension is", dim,
-                  "whereas train data dimension is", self.DIM)
+        if test.shape[1] != self.w_k.shape[1]:
+            print("ERROR: Test data dimension is", test.shape[1],
+                  "whereas train data dimension is", self.w_k.shape[1])
             print("Exiting..")
             sys.exit()
 
-    def __compute_W_k_and_W_k0(self, class_mus, scov, priors):
+    def __compute_wk_and_wk0(self, class_mus, scov, priors):
         """ Return W_k which is a matrix, where every row corresponds to w_k
         for a particular class. Compute W_k0 which is a vector, where every
         element corresponds to w_k0 for a particular class """
 
-        self.W_k = np.zeros(shape=(self.NOC, self.DIM), dtype=np.float64)
-        self.W_k0 = np.zeros(shape=(self.NOC), dtype=np.float64)
+        noc = class_mus.shape[0]
+        self.w_k0 = np.zeros(shape=(noc), dtype=np.float64)
 
         s_inv = np.linalg.inv(scov)
+        self.w_k = s_inv.dot(class_mus.T).T
 
-        for i in range(self.NOC):
-            mu = class_mus[i].reshape(self.DIM, 1)
-            self.W_k[i, :] = s_inv.dot(mu).reshape(self.DIM)
+        for k in range(noc):
+            mu_k = class_mus[k].reshape(-1, 1)
+            # self.w_k[k, :] = s_inv.dot(mu_k).reshape(dim)
+            self.w_k0[k] = (-0.5 * (mu_k.T.dot(s_inv).dot(mu_k))) + priors[k]
 
-            self.W_k0[i] = (-0.5 * (mu.T.dot(s_inv).dot(mu))) + priors[i]
 
     # @profile
     def train(self, data, labels):
@@ -149,63 +124,22 @@ class GC:
         if self.stdize:
             data, self.col_mean, self.col_std = standardize_data(data)
 
-        self.label_map = sorted(np.unique(labels))
-
-        self.NOC = len(self.label_map)
-        N, self.DIM = data.shape
-
-        class_sizes = np.zeros(shape=(self.NOC), dtype=np.float64)
-        weights = np.zeros(shape=(self.NOC), dtype=np.float64)
-
-        class_mus = np.zeros(shape=(self.NOC, self.DIM), dtype=np.float64)
-        class_covs = np.zeros(shape=(self.NOC, self.DIM, self.DIM),
-                              dtype=np.float64)
-
-        # k is index for class labels, because the labels may not
-        # start from 0
-        k = 0
-        for i in self.label_map:
-            ixs = np.where(labels == i)[0]
-            data_ci = data[ixs]
-
-            class_sizes[k] = len(ixs)
-            mu_k, cov_k = self.__compute_WCC(data_ci)
-
-            class_mus[k, :] = mu_k.T
-            class_covs[k, :, :] = cov_k
-            k += 1
-
-        # global mean
-        gl_mu = np.reshape(np.mean(data, axis=0, dtype=np.float64),
-                           (self.DIM, 1))
-
-        cov_ac = self.__compute_ACC(gl_mu, class_mus, class_sizes, N)
-
-        if self.check:
-            # global cov
-            gl_cov = np.cov(data.T)
-            self.__check(class_covs, cov_ac, gl_cov, class_sizes, gl_mu,
-                         class_mus, N)
+        class_mus, scov, class_sizes = self.compute_cmus_scov(data, labels)
+        noc = len(class_sizes)
 
         if self.est_prior:
-            priors = weights
+            priors = class_sizes / noc
         else:
-            priors = np.asarray([1.0 / self.NOC] * self.NOC)
-
-        # shared COV
-        scov = np.zeros(shape=(self.DIM, self.DIM), dtype=np.float64)
-        for i in range(self.NOC):
-            scov += np.multiply(class_covs[i], class_sizes[i])
-        scov = np.divide(scov, np.float64(N))
+            priors = np.ones(shape=(noc, 1)) / noc
 
         # compute W_k (matrix), W_k0 (vector)
-        self.__compute_W_k_and_W_k0(class_mus, scov, priors)
+        self.__compute_wk_and_wk0(class_mus, scov, priors)
 
         # log posteriors
-        self.logP = self.W_k.dot(data.T).T
-        np.add(self.W_k0, self.logP, out=self.logP)
+        self.log_post = self.w_k.dot(data.T).T
+        np.add(self.w_k0, self.log_post, out=self.log_post)
 
-    def predict(self, test):
+    def predict(self, test, return_probs=False):
         """ Predict the class labels for the test data
 
         Parameters:
@@ -230,21 +164,34 @@ class GC:
         #        W_k = scov.inv() * mu_k
         #     W_{k0} = (-0.5)(mu.T)(scov.inv())(mu_k) + ln[P(C_k)]
 
-        y_p = np.zeros(shape=(test.shape[0]))
+        """
+        y_p = np.zeros(shape=(test.shape[0], self.noc), dtype=float)
         for i in range(np.shape(test)[0]):
 
             x = test[i, :]
-            x = x.reshape(self.DIM, 1)
+            x = x.reshape(self.dim, 1)
 
-            a_k = np.zeros(shape=(self.NOC), dtype=np.float64)
+            a_k = np.zeros(shape=(self.noc), dtype=float)
 
             # compute likelihood of x, as belonging/generated by every class
-            for k in range(self.NOC):
-                wk_T = self.W_k[k].reshape(1, self.DIM)
-                lh = wk_T.dot(x) + self.W_k0[k]  # posterior (not normalized)
-                a_k[k] = lh
+            for k in range(self.noc):
+                wk_T = self.w_k[k].reshape(1, self.dim)
+                a_k[k] = wk_T.dot(x) + self.w_k0[k]  # posterior (not normalized)
+                y_p[i, k] = a_k[k]
+        """
+        y_p = test.dot(self.w_k.T) + self.w_k0
 
-            y_p[i] = self.label_map[np.argmax(a_k)]  # test predicted
+        if return_probs:
+            # y_p = y_p / np.sum(y_p, axis=1).reshape(-1, 1)
+            # np.log(y_p, out=y_p)
+            y_p = y_p.T
+            y_p -= logsumexp(y_p)
+            np.exp(y_p, out=y_p)
+            y_p = y_p.T
+        else:
+            y_tmp = np.argmax(y_p, axis=1)
+            # do the inverse label map
+            y_p = [self.label_map[i] for i in y_tmp]
 
         return y_p
 

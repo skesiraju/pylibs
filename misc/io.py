@@ -11,6 +11,7 @@ Simple utility functions
 """
 
 import csv
+import codecs
 from collections import defaultdict
 
 
@@ -39,9 +40,9 @@ def convert_data_to_svm(data, labels):
     return data_lst
 
 
-def chunkify(lst, n):
+def chunkify(lst, n_chunks):
     """ chunkify a list to n chunks """
-    return [lst[i::n] for i in range(n)]
+    return [lst[i::n_chunks] for i in range(n_chunks)]
 
 
 def read_simple_flist(fname, pre="", sfx=""):
@@ -58,7 +59,7 @@ def read_simple_flist(fname, pre="", sfx=""):
     """
 
     flist = []
-    with open(fname, 'r') as fpr:
+    with codecs.open(fname, 'r', 'utf-8') as fpr:
         flist = fpr.read().split("\n")
 
     if flist[-1].strip() == "":
@@ -83,13 +84,13 @@ def read_time_stamps(fname):
     """
 
     tlist = []
-    with open(fname, 'r') as fpr:
+    with codecs.open(fname, 'r', 'utf-8') as fpr:
         for line in fpr:
             line = line.strip()
             vals = line.split(" ")
-            st = float(vals[0])
-            et = float(vals[1])
-            tlist.append((st, et))
+            stime = float(vals[0])
+            etime = float(vals[1])
+            tlist.append((stime, etime))
 
     return tlist
 
@@ -111,8 +112,23 @@ def load_key_file(kname):
         reader = csv.DictReader(fpr)
         # read a row as {column1: value1, column2: value2,...}
         for row in reader:
-            for (k, v) in row.items():  # go over each column name and value
+            for (k, val) in row.items():  # go over each column name and value
                 # append the value into the appropriate list
                 # based on column name k
-                cols[k].append(v)
+                cols[k].append(val)
     return cols
+
+
+def write_simple_flist(some_list, out_fname):
+    """ Write the elements in the list line by line
+    in the given out file
+
+    Parameters:
+    -----------
+    some_list (list): list of elements
+    out_fname (str): output file name
+
+    """
+
+    with codecs.open(out_fname, "w", "utf-8") as fpw:
+        fpw.write("\n".join(some_list))

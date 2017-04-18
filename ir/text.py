@@ -25,15 +25,15 @@ from math import log
 
 def replace_data(data, replace):
     """ replace the certain tokens in the data according to
-    the tuples in the list replace. Input data is string """    
+    the tuples in the list replace. Input data is string """
 
-    new_data = "" 
+    new_data = ""
     lines = data.split('\n')
     for line in lines:
 
         if line.strip() == '':
             continue
-        
+
         for pair in replace:
             patt = re.compile(pair[0])
             line = re.sub(patt, pair[1], line)
@@ -214,7 +214,7 @@ def update_postings(post_d, tf, d_ix):
     return post_d
 
 
-def convert_postings_to_dbyw(post_d, ndocs, vocab=None):
+def convert_postings_to_dbyw(post_d, ndocs, vocab=None, dtype=int):
     """ Convert the postings to doc by word sparse matrix. Row indices are
     doc indices from postings and column indices are word indices from
     vocabulary. In the postings, doc ID are doc indices (int) not alpha-num.
@@ -255,7 +255,7 @@ def convert_postings_to_dbyw(post_d, ndocs, vocab=None):
     for tok, doc_d in post_d.items():
 
         try:
-            
+
             w_ix = vocab.index(tok)
             doc_ixs = list(doc_d.keys())
 
@@ -269,7 +269,7 @@ def convert_postings_to_dbyw(post_d, ndocs, vocab=None):
             pass
 
     DbyW = scipy.sparse.coo_matrix((vals, (rows, cols)), shape=(D, W),
-                                   dtype=int)
+                                   dtype=dtype)
 
     return DbyW, vocab
 
@@ -381,7 +381,7 @@ def trim_postings(post_d, min_freq):
     """ Trim postings based on min freq """
 
     new_post = {}
-    
+
     for tok, doc_d in post_d.items():
         new_doc_d = {}
         for doc_id, freq in doc_d.items():
@@ -390,10 +390,10 @@ def trim_postings(post_d, min_freq):
 
         if len(new_doc_d) > 0:
             new_post[tok] = new_doc_d
-        
+
     return new_post
-                
-    
+
+
 
 class TextVector:
 
@@ -465,9 +465,9 @@ class TextVector:
                     data = data.lower()
                 if self.clean is not None:
                     data = clean_data(data, self.clean)
-                if self.replace is not None:                    
-                    data = replace_data(data, self.replace)                   
-                       
+                if self.replace is not None:
+                    data = replace_data(data, self.replace)
+
                 if self.remove_punc:
                     data = remove_punc(data)
 
@@ -482,7 +482,7 @@ class TextVector:
 
                 if self.starts_with_id:
                     tokens = tokens[1:]
-                    
+
                 for i in range(len(tokens) - self.n+1):
                     tok = " ".join(tokens[i: i+self.n]).strip()
 
@@ -503,8 +503,8 @@ class TextVector:
 
         if self.min_freq > 1:
             post_d = trim_postings(post_d, self.min_freq)
-        
-                    
+
+
         return post_d
 
     def fit_postings(self, flist):
