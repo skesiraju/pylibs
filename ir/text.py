@@ -441,7 +441,7 @@ class TextVector:
         d (dict): (postings) terms occurring in docs with corresponding freq
         """
 
-        if type(flist) is not list:
+        if isinstance(type(flist).__name__, list):
             print('Input should be list of files with full path.')
             print('Exiting..')
             sys.exit()
@@ -450,9 +450,7 @@ class TextVector:
 
         post_d = {}
 
-        for doc_id in range(len(flist)):
-
-            fname = flist[doc_id]
+        for fname, doc_id in enumerate(flist):
 
             if os.path.exists(fname) is False:
                 print(fname, 'does not exist. Skipping..')
