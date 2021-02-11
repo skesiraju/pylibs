@@ -1,13 +1,14 @@
-# 
+#
 Utilities for text processing, information retrieval, classifiers, etc,.
 
 In case you use the following classifiers
 1. Gaussian linear classifier with uncertainty (GLCU)
 2. Multi-class logistic regression with uncertainty (MCLRU)
 
-Please cite the following paper(s):
+Please cite the following paper(s) accordingly:
 
 ```
+[1]
 @article{Kesiraju:2019:BaySMM,
 	author  = {Santosh Kesiraju and Old{\v{r}}ich Plchot and
 	Luka{\v{s}} Burget and Suryakanth V Gangashetty},
@@ -20,6 +21,7 @@ Please cite the following paper(s):
 	doi={10.1109/TASLP.2020.3012062}
 }
 
+[2]
 @misc{Kesiraju:2020:Multi,
   title= "{A Bayesian multilingual document model for zero-shot cross-lingual topic identification}",
   author={Santosh Kesiraju and Sangeet Sagar and Ond\v{r}ej Glembek and Luk\'{a}\v{s} Burget and Suryakanth V Gangashetty},
