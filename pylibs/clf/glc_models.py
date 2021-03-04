@@ -13,13 +13,12 @@ Gaussian Linear Classifier with Uncertainty (GLCU)
 
 import os
 import sys
-import shutil
 import argparse
 import tempfile
 import numpy as np
 import scipy.sparse as sparse
-from scipy.special import logsumexp as lse
 import numexpr as ne
+from scipy.special import logsumexp as lse
 
 
 def logsumexp(mat):
@@ -105,6 +104,10 @@ class GLC:
             # self.w_k[k, :] = s_inv.dot(mu_k).reshape(dim)
             self.w_k0[k] = (-0.5 * (mu_k.T.dot(s_inv).dot(mu_k))) + log_priors[k]
 
+    def fit(self, data, labels):
+
+        self.train(data, labels)
+
     def train(self, data, labels):
         """ Train Gaussian linear classifier
 
@@ -181,7 +184,7 @@ class GLC:
         # do the inverse label map
         y_p = [self.label_map[i] for i in y_tmp]
 
-        return np.asarray(y_p, dtype=int)
+        return np.asarray(y_p)
 
     def predict_proba(self, test):
         """ Predict the posterior probabilities of class labels for the test data
@@ -258,7 +261,7 @@ class GLCU:
         tmp = means - self.m2l.dot(self.cmus)
         self.scov = (tmp.T.dot(tmp) / N).astype(np.float32)
 
-    def train_sb(self, data, labels, covs=None):
+    def train(self, data, labels, covs=None):
         """ Train using EM
 
         Args:
@@ -451,11 +454,10 @@ class GLCU:
 
         self.scov /= mus.shape[0]
 
+    def fit(self, data, labels, covs=None, bsize=4096):
+        self.train_b(data, labels, covs=covs, bsize=bsize)
+
     def train_b(self, data, labels, covs=None, bsize=4096):
-
-        self.train(data, labels, covs=covs, bsize=bsize)
-
-    def train(self, data, labels, covs=None, bsize=4096):
         """ Train using EM
 
         Args:
@@ -496,9 +498,9 @@ class GLCU:
             self.m_step(mus, alphas, i, bsize)
             # print()
 
-            shutil.rmtree(self.tmp_dir)
+            os.system("rm -rf " + self.tmp_dir + "/*.npy")
 
-    def predict_sb(self, data, return_labels=False, covs=None):
+    def predict(self, data, return_labels=True, covs=None):
         """ Predict log-likelihoods or labels given the test data (means and covs).
 
         Args:
@@ -569,10 +571,6 @@ class GLCU:
 
 
     def predict_b(self, data, return_labels=False, covs=None, bsize=4096):
-
-        return self.predict(data, return_labels=return_labels, covs=covs, bsize=bsize)
-
-    def predict(self, data, return_labels=False, covs=None, bsize=4096):
         """ Predict log-likelihoods or labels given the test data (means and covs).
 
         Args:
@@ -652,10 +650,10 @@ class GLCU:
 
     def predict_proba(self, data, return_labels=False, covs=None, bsize=4096):
         """ Predict probabilties """
-
         log_prob = self.predict_b(data)
         pred_probs = np.exp(log_prob.T - lse(log_prob, axis=1)).T
         return pred_probs
+
 
 
 def main():
