@@ -46,7 +46,7 @@ class BoW:
     """ Bag-of-words statistics accumulator """
 
     def __init__(self, sp_char=" ", lower=True, remove_punc=True,
-                 analyzer='word', ngram=1, dtype=np.uint16):
+                 analyzer='word', ngram=1, dtype=np.int64):
         """ Initialize """
 
         self.sp_char = sp_char
@@ -55,6 +55,8 @@ class BoW:
         self.analyzer = analyzer
         self.ngram = ngram
         self.dtype = dtype
+
+        print("BoW (dtype):", str(dtype))
 
         self.vocab_d = OrderedDict()
 
