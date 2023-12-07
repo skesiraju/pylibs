@@ -14,8 +14,57 @@ import os
 import sys
 import csv
 import json
-import codecs
+import logging
+from datetime import datetime
 from collections import defaultdict
+
+
+def save_to_json(d, json_file):
+    """Save the dictionary to json file"""
+
+    with open(json_file, 'w', encoding='utf-8') as fpw:
+        json.dump(d, fpw, indent=2, sort_keys=True, ensure_ascii=False)
+
+
+def load_json(json_file):
+    """Load json file into a dictionary"""
+    data = {}
+    if os.path.exists(json_file):
+        with open(json_file, "r") as fpr:
+            data = json.load(fpr)
+
+    else:
+        print("- ERROR: File not found.", json_file, file=sys.stderr)
+        sys.exit()
+
+    return data
+
+
+def create_log_file(log_dir, phase, verbose=False):
+    """Create a log file and return the logger.
+
+    Args:
+    -----
+        log_dir (str): Path to dir where log file shall be saved.
+        phase (str): Prefix name of the log file
+        verbose (bool): Adds streamHandler so that log prints on stdout as well
+
+    """
+
+    now_str = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    log_file = os.path.join(log_dir, f"{phase}_{now_str}.log")
+    logging.basicConfig(
+        format="%(asctime)s %(message)s",
+        datefmt="%d-%m-%Y %H:%M:%S",
+        filename=log_file,
+        filemode="w",
+        level=logging.INFO,
+    )
+    print("- Log file:", log_file)
+    logger = logging.getLogger()
+    if verbose:
+        logger.addHandler(logging.StreamHandler())
+    return logger
 
 
 def get_ivectors_from_h5(
@@ -56,16 +105,23 @@ def get_ivectors_from_h5(
             pass
 
     # == Determine em_dim
+    cfg_file = ""
     if not config:
         cfg_file = os.path.join(os.path.dirname(ivecs_h5_file), "../config.json")
+        if os.path.exists(cfg_file):
+            with open(cfg_file, "r") as fpr:
+                config = json.load(fpr)
+        else:
+            cfg_file = os.path.join(os.path.dirname(ivecs_h5_file), "../../config.json")
+            if os.path.exists(cfg_file):
+                with open(cfg_file, "r") as fpr:
+                    config = json.load(fpr)
 
-    if os.path.exists(cfg_file):
-        with open(cfg_file, "r") as fpr:
-            config = json.load(fpr)
+    if not em_dim and config:
         em_dim = config["hyper"]["K"]
 
-        if not max_iters:
-            max_iters = config["xtr_iters"]
+    if not max_iters and config:
+        max_iters = config["xtr_iters"]
 
     else:
         if em_dim is None:
@@ -154,7 +210,7 @@ def read_simple_flist(fname, pre="", sfx=""):
     """
 
     flist = []
-    with codecs.open(fname, "r", "utf-8") as fpr:
+    with open(fname, "r", encoding="utf-8") as fpr:
         flist = [line.strip() for line in fpr if line.strip()]
 
     if flist[-1].strip() == "":
@@ -179,7 +235,7 @@ def read_time_stamps(fname):
     """
 
     tlist = []
-    with codecs.open(fname, "r", "utf-8") as fpr:
+    with open(fname, "r", encoding="utf-8") as fpr:
         for line in fpr:
             line = line.strip()
             vals = line.split(" ")
@@ -225,5 +281,5 @@ def write_simple_flist(some_list, out_fname):
 
     """
 
-    with codecs.open(out_fname, "w", "utf-8") as fpw:
+    with open(out_fname, "w", encoding="utf-8") as fpw:
         fpw.write("\n".join(some_list))

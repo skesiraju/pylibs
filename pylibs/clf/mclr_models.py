@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class MCLR(nn.Module):
-    """ Multi-class Logistic Regression """
+    """Multi-class Logistic Regression"""
 
     def __init__(
         self, dim, n_classes, lam_w=5e-02, trn_iters=500, lr=1e-02, cuda: bool = False
@@ -55,7 +55,7 @@ class MCLR(nn.Module):
         self.log_softmax = nn.LogSoftmax(dim=1)
 
     def compute_grads(self, compute: bool):
-        """ compute grads, yes or no """
+        """compute grads, yes or no"""
 
         self.W.requires_grad_(compute)
         self.b.requires_grad_(compute)
@@ -80,21 +80,21 @@ class MCLR(nn.Module):
     #    return (self.W ** 2).sum() * self.lam_w
 
     def loss(self, logits, Y):
-        """ Compute loss """
+        """Compute loss"""
 
         xen = self.xen_loss(logits, Y)
         return xen
 
     def fit(self, X, Y):
-        """ Fit or train the model """
+        """Fit or train the model"""
 
         if isinstance(X, np.ndarray):
             X = torch.from_numpy(X)
             Y = torch.from_numpy(Y).to(dtype=torch.long)
 
         # if opt  == 'adam':
-        # print("MCLR: Using AdamW with default learning rate.")
-        opt = torch.optim.AdamW([self.W, self.b], lr=self.lr, weight_decay=self.lam_w)
+        # print("MCLR: Using Adam with default learning rate.")
+        opt = torch.optim.Adam([self.W, self.b], lr=self.lr, weight_decay=self.lam_w)
 
         train(self, opt, X, Y, self.trn_iters)
 
@@ -108,7 +108,7 @@ class MCLR(nn.Module):
 
         # if opt == 'adam':
         # print("MCLR: Using adam with default learning rate.")
-        opt = torch.optim.AdamW([self.W, self.b], lr=self.lr, weight_decay=self.lam_w)
+        opt = torch.optim.Adam([self.W, self.b], lr=self.lr, weight_decay=self.lam_w)
 
         train_and_validate(
             self,
@@ -124,10 +124,11 @@ class MCLR(nn.Module):
         )
 
     def predict_proba(self, X):
-        """ Predict posterior probability of class labels """
+        """Predict posterior probability of class labels"""
 
         if isinstance(X, np.ndarray):
-            X = torch.from_numpy(X).to(device=self.device)
+            X = torch.from_numpy(X)
+        X = X.to(device=self.device)
 
         self.compute_grads(False)
         logits = self.forward(X)
@@ -136,13 +137,14 @@ class MCLR(nn.Module):
     def predict(self, X):
 
         if isinstance(X, np.ndarray):
-            X = torch.from_numpy(X).to(device=self.device)
+            X = torch.from_numpy(X)
+        X = X.to(device=self.device)
 
         return predict(self, X)
 
 
 class MCLRU(nn.Module):
-    """ Multi-class Logistic Regression with uncertainty """
+    """Multi-class Logistic Regression with uncertainty"""
 
     def __init__(
         self,
@@ -174,8 +176,10 @@ class MCLRU(nn.Module):
         self.device = torch.device("cuda" if cuda else "cpu")
         self.use_uncert = use_uncert
 
-        self.b = nn.Parameter(torch.randn(1, n_classes) * 0.001, requires_grad=True)
-        self.W = nn.Parameter(torch.randn(dim, n_classes) * 0.001, requires_grad=True)
+        self.b = nn.Parameter(torch.randn(1, n_classes), requires_grad=True)
+        self.W = nn.Parameter(torch.randn(dim, n_classes), requires_grad=True)
+        nn.init.xavier_uniform_(self.b.data)
+        nn.init.xavier_uniform_(self.W.data)
         self.lam_w = nn.Parameter(torch.Tensor([lam_w]), requires_grad=False)
 
         self.R = nn.Parameter(torch.Tensor([R]), requires_grad=False).long()
@@ -188,13 +192,13 @@ class MCLRU(nn.Module):
         self.log_softmax = nn.LogSoftmax(dim=2)
 
     def compute_grads(self, compute: bool):
-        """ compute grads, yes or no """
+        """compute grads, yes or no"""
 
         self.W.requires_grad_(compute)
         self.b.requires_grad_(compute)
 
     def sample(self, N):
-        """ Generate samples from std. Normal """
+        """Generate samples from std. Normal"""
 
         return torch.randn(size=(self.R, N, self.dim)).to(device=self.device)
 
@@ -221,7 +225,7 @@ class MCLRU(nn.Module):
     #    return (self.W ** 2).sum() * self.lam_w
 
     def loss(self, logits, Y):
-        """ Compute loss """
+        """Compute loss"""
 
         xen = torch.Tensor([0.0]).to(device=self.device)
         if self.use_uncert:
@@ -234,15 +238,15 @@ class MCLRU(nn.Module):
         return xen
 
     def fit(self, X, Y):
-        """ Fit or train the model """
+        """Fit or train the model"""
 
         if isinstance(X, np.ndarray):
             X = torch.from_numpy(X)
             Y = torch.from_numpy(Y).to(dtype=torch.long)
 
         # if opt == 'adam':
-        # print("MCLRU: Using AdamW with default learning rate.")
-        opt = torch.optim.AdamW([self.W, self.b], lr=self.lr, weight_decay=self.lam_w)
+        # print("MCLRU: Using Adam with default learning rate.")
+        opt = torch.optim.Adam([self.W, self.b], lr=self.lr, weight_decay=self.lam_w)
 
         train(self, opt, X, Y, self.trn_iters)
 
@@ -250,13 +254,15 @@ class MCLRU(nn.Module):
         self, x_train, y_train, x_dev, y_dev, out_sfx="", val_iters=1, save=True
     ):
 
-        if isinstance(X, np.ndarray):
-            X = torch.from_numpy(X)
-            Y = torch.from_numpy(Y).to(dtype=torch.long)
+        if isinstance(x_train, np.ndarray):
+            x_train = torch.from_numpy(x_train)
+            y_train = torch.from_numpy(y_train).to(dtype=torch.long)
+            x_dev = torch.from_numpy(x_dev)
+            y_dev = torch.from_numpy(y_dev).to(dtype=torch.long)
 
         # if opt == 'adam':
-        # print("MCRLU: Using AdamW with default learning rate.")
-        opt = torch.optim.AdamW([self.W, self.b], lr=self.lr, weight_decay=self.lam_w)
+        # print("MCRLU: Using Adam with default learning rate.")
+        opt = torch.optim.Adam([self.W, self.b], lr=self.lr, weight_decay=self.lam_w)
 
         train_and_validate(
             self,
@@ -272,10 +278,11 @@ class MCLRU(nn.Module):
         )
 
     def predict_proba(self, X):
-        """ Predict posterior probability of class labels """
+        """Predict posterior probability of class labels"""
 
         if isinstance(X, np.ndarray):
-            X = torch.from_numpy(X).to(device=self.device)
+            X = torch.from_numpy(X)
+        X = X.to(device=self.device)
 
         self.compute_grads(False)
         self.use_uncert = True
@@ -286,38 +293,40 @@ class MCLRU(nn.Module):
     def predict(self, X):
 
         if isinstance(X, np.ndarray):
-            X = torch.from_numpy(X).to(device=self.device)
+            X = torch.from_numpy(X)
+        X = X.to(device=self.device)
 
         return predict(self, X)
 
 
 def save_model(model, out_file):
-    """ Save model """
+    """Save model"""
 
     logger.info("Saving model %s", out_file)
     torch.save(model.state_dict(), out_file)
 
 
 def load_model(model, model_file):
-    """ Load model """
+    """Load model"""
 
     model.load_state_dict(torch.load(model_file))
     return model
 
 
 def train(model, optim, X, Y, trn_iters):
-    """ Train the model """
+    """Train the model"""
 
     train_dset = torch.utils.data.TensorDataset(X, Y)
     train_dataloader = torch.utils.data.DataLoader(
-        train_dset, batch_size=4096, pin_memory=True)
+        train_dset, batch_size=4096, pin_memory=True
+    )
 
     # train_losses = []
     best_loss = torch.Tensor([9999999]).to(model.device)
 
     for i in range(trn_iters):
 
-        total_loss = torch.tensor(0.).to(device=model.device)
+        total_loss = torch.tensor(0.0).to(device=model.device)
         for x, y in train_dataloader:
             x = x.to(device=model.device)
             y = y.to(device=model.device)
@@ -358,7 +367,7 @@ def train_and_validate(
     val_iters=1,
     save=True,
 ):
-    """ Train the model and validate after `val_iters` """
+    """Train the model and validate after `val_iters`"""
 
     x_train = x_train.to(device=model.device)
     y_train = y_train.to(device=model.device)
@@ -411,14 +420,18 @@ def train_and_validate(
 
 
 def predict(model, X):
-    """ Predict post. prob of classes given the features """
+    """Predict post. prob of classes given the features"""
+
+    if isinstance(X, np.ndarray):
+        X = torch.from_numpy(X)
+    X = X.to(device=model.device)
 
     probs = model.predict_proba(X)
     return torch.argmax(probs, dim=1).cpu().numpy()
 
 
 def main():
-    """ main method """
+    """main method"""
 
     args = parse_arguments()
 
@@ -430,7 +443,7 @@ def main():
     X_dev = torch.randn(100, 5 * 2)
     Y_dev = torch.randint(0, 4, size=(100,))
 
-    opt = torch.optim.AdamW(clf.parameters())
+    opt = torch.optim.Adam(clf.parameters())
 
     logging.basicConfig(
         format="%(asctime)s %(message)s",
@@ -449,7 +462,7 @@ def main():
 
 
 def parse_arguments():
-    """ parse command line args """
+    """parse command line args"""
 
     parser = argparse.ArgumentParser(description=__doc__)
     # parser.add_argument("train_feats_f", help="path to training feats file")

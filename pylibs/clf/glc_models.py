@@ -14,6 +14,7 @@ Gaussian Linear Classifier with Uncertainty (GLCU)
 import os
 import sys
 import argparse
+import shutil
 import tempfile
 import numpy as np
 import scipy.sparse as sparse
@@ -31,6 +32,45 @@ def logsumexp(mat):
     inf_ix = ~np.isfinite(xmax)
     x_mat[inf_ix] = xmax[inf_ix]
     return x_mat
+
+# from pytel
+def logsumexp2(x, axis=0):
+    xmax = x.max(axis)
+    x = xmax + np.log(np.sum(np.exp(x - np.expand_dims(xmax, axis)), axis))
+    not_finite = ~np.isfinite(xmax)
+    x[not_finite] = xmax[not_finite]
+    return x
+
+
+# from pytel
+def loglh2detection_llr(loglh, prior=None):
+    """
+    Converts log-likelihoods to log-likelihood ratios returned by detectors
+    of the individual classes as defined in NIST LRE evaluations (i.e. for each
+    detector calculates ratio between 1) likelihood of the corresponding class
+    and 2) sum of likelihoods if all other classes). When summing likelihoods
+    of the compeeting clases, these can be weighted by vector of priors.
+
+    Input:
+    loglh - matrix log-likelihoods (trial, class)
+    prior - vector of class priors (default: equal priors)
+
+    Output:
+    logllr - matrix of log-likelihood ratios (trial, class)
+    """
+
+    logllr = np.empty_like(loglh)
+    nc = loglh.shape[1]
+    prior = np.ones(nc) if prior is None else np.array(prior, np.float).ravel()
+
+    for d in range(nc):
+        competitors = np.r_[:d, d + 1 : nc]
+        logweights = np.log(prior[competitors] / sum(prior[competitors]))
+        logllr[:, d] = loglh[:, d] - logsumexp2(
+            loglh[:, competitors] + logweights, axis=1
+        )
+
+    return logllr
 
 
 class GLC:
@@ -300,7 +340,7 @@ class GLCU:
         lambdas = np.zeros(shape=(mus.shape[0], self.dim, self.dim),
                            dtype=np.float32)
 
-        for _ in range(self.trn_iters):
+        for i in range(self.trn_iters):
 
             # E - step: get the posterior of latent variables Z
             # i.e, q(z_n) = N(z_n | alpha_n, Lambda_n.inv())
@@ -339,7 +379,9 @@ class GLCU:
                          tmp.T.dot(tmp)) / mus.shape[0]
             spre = np.linalg.inv(self.scov)
 
-
+            if np.linalg.slogdet(self.scov)[0] < 0:
+                print("- Error: The det of shared cov matrix is negative after iteration {:2d}. Try training the model for lesser number of EM iterations.".format(i+1))
+                sys.exit()
 
     def e_step(self, mus, covs, i, bsize):
         """ E step - get the posterior distribution of latent variables.
@@ -498,7 +540,11 @@ class GLCU:
             self.m_step(mus, alphas, i, bsize)
             # print()
 
-            os.system("rm -rf " + self.tmp_dir + "/*.npy")
+            if np.linalg.slogdet(self.scov)[0] < 0:
+                print("- Error: The det of shared cov matrix is negative after iteration {:2d}. Try training the model for lesser number of EM iterations.".format(i+1))
+                sys.exit()
+
+            shutil.rmtree(self.tmp_dir + "/*.npy")
 
     def predict(self, data, return_labels=True, covs=None):
         """ Predict log-likelihoods or labels given the test data (means and covs).
@@ -535,8 +581,9 @@ class GLCU:
         const = -0.5 * self.dim * np.log(2 * np.pi)
 
         if (sgn < 0).any():
-            print("WARNING: Det of tot_covs is Negative.")
-            sys.exit()
+            print("WARNING: Det of tot_covs is Negative. Try training the model it for fewer number of iterations.")
+            print('sign of scov:', np.linalg.slogdet(self.scov)[0])
+            # sys.exit()
 
         # class conditional log-likelihoods
         cc_llh = np.zeros(shape=(mus.shape[0], self.cmus.shape[0]),
@@ -569,8 +616,7 @@ class GLCU:
 
         return ret_val
 
-
-    def predict_b(self, data, return_labels=False, covs=None, bsize=4096):
+    def predict_b(self, data, return_labels=True, covs=None, bsize=4096):
         """ Predict log-likelihoods or labels given the test data (means and covs).
 
         Args:
@@ -619,8 +665,10 @@ class GLCU:
             sgn, log_dets = np.linalg.slogdet(tot_covs)
 
             if (sgn < 0).any():
-                print("WARNING: Det of tot_covs is Negative.")
-                sys.exit()
+                print("WARNING: Det of tot_covs is Negative. Try training the model it for fewer number of iterations.")
+                print('sign of scov:', np.linalg.slogdet(self.scov)[0])
+
+                # sys.exit()
 
             for n in range(sdoc, edoc, 1):  # for each doc in the batch
                 tmp = self.cmus - mus[n, :]
@@ -648,11 +696,27 @@ class GLCU:
 
         return ret_val
 
-    def predict_proba(self, data, return_labels=False, covs=None, bsize=4096):
+    def predict_proba(self, data, covs=None, bsize=4096):
         """ Predict probabilties """
-        log_prob = self.predict_b(data)
+        log_prob = self.predict_b(data, return_labels=False, covs=covs, bsize=bsize)
         pred_probs = np.exp(log_prob.T - lse(log_prob, axis=1)).T
         return pred_probs
+
+    def compute_cc_llh(self, data, covs=None, bsize=4096):
+        """ Compute class conditional log-likelihoods """
+
+        prior_status = self.est_prior
+        self.est_prior = False
+
+        cc_llh = self.predict_b(data, return_labels=False, covs=covs, bsize=bsize)
+
+        self.est_prior = prior_status
+
+        return cc_llh
+
+    def compute_llh_ratios(self, data, covs=None, bsize=4096):
+
+        return loglh2detection_llr(self.compute_cc_llh(data, covs=covs, bsize=bsize), self.priors)
 
 
 
